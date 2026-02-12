@@ -2,40 +2,48 @@ const sharp = require("sharp");
 const { v4: uuidv4 } = require("uuid");
 const asyncHandler = require("express-async-handler");
 const s3 = require("../utils/s3");
+
 const factory = require("./handlersFactory");
 const { uploadSingleImage } = require("../middlewares/imageUpload");
 const Category = require("../models/categoryModel");
 
-// Upload
+// AWS S3 setup
+
+// Middleware to handle single image upload
 exports.uploadCategoryImage = uploadSingleImage("image");
 
-// Resize & Upload
-exports.resizeCategoryImage = asyncHandler(async (req, res, next) => {
+// Resize and upload to S3
+exports.resizeImage = asyncHandler(async (req, res, next) => {
   if (!req.file) return next();
 
+  const ext = req.file.mimetype.split("/")[1];
+  const filename = `categories/${uuidv4()}-${Date.now()}.${ext}`;
+
+  // Resize using Sharp
   const buffer = await sharp(req.file.buffer)
-    .resize(600, 600)
-    .jpeg({ quality: 90 })
+    // .resize(500, 500) // optional
     .toBuffer();
 
-  const key = `categories/${uuidv4()}-${Date.now()}.jpeg`;
+  // Upload to S3
+  const params = {
+    Bucket: process.env.AWS_S3_BUCKET_NAME, // e.g., "almarah-products-bucket"
+    Key: filename,
+    Body: buffer,
+    ContentType: req.file.mimetype,
+    ACL: "public-read", // so URL can be accessed publicly
+  };
 
-  const upload = await s3
-    .upload({
-      Bucket: process.env.AWS_BUCKET_NAME,
-      Key: key,
-      Body: buffer,
-      ContentType: "image/jpeg",
-    })
-    .promise();
+  const uploadResult = await s3.upload(params).promise();
 
-  req.body.image = upload.Location; // FULL URL
+  // Save the full S3 URL in the DB
+  req.body.image = uploadResult.Location; // this is the public S3 URL
   next();
 });
 
-// CRUD
+// --- Factory methods unchanged ---
 exports.getCategories = factory.getAll(Category);
 exports.getCategory = factory.getOne(Category);
 exports.createCategory = factory.createOne(Category);
 exports.updateCategory = factory.updateOne(Category);
 exports.deleteCategory = factory.deleteOne(Category);
+exports.deleteAll = factory.deleteAll(Category);

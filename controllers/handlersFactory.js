@@ -2,14 +2,33 @@ const asyncHandler = require("express-async-handler");
 const ApiError = require("../utils/apiError");
 const ApiFeatures = require("../utils/apiFeatures");
 
+const setImageUrl = (doc) => {
+  if (doc.imageCover) {
+    const imageCoverUrl = `${process.env.BASE_URL}/products/${doc.imageCover}`;
+    doc.imageCover = imageCoverUrl;
+  }
+  if (doc.images) {
+    const images = [];
+    doc.images.forEach((image) => {
+      const imageUrl = `${process.env.BASE_URL}/products/${image}`;
+      images.push(imageUrl);
+    });
+    doc.images = images;
+  }
+};
+
 exports.deleteOne = (Model) =>
   asyncHandler(async (req, res, next) => {
     const document = await Model.findByIdAndDelete(req.params.id);
 
     if (!document) {
-      return next(new ApiError("No document found", 404));
+      next(
+        new ApiError(`No document found for this id: ${req.params.id}`, 404),
+      );
     }
-
+    // To trigger 'remove' event when delete document
+    document.remove();
+    // 204 no content
     res.status(204).send();
   });
 
@@ -20,48 +39,86 @@ exports.updateOne = (Model) =>
     });
 
     if (!document) {
-      return next(new ApiError("No document found", 404));
+      return next(
+        new ApiError(`No document found for this id: ${req.params.id}`, 404),
+      );
     }
 
-    res.status(200).json({ data: document });
+    // To trigger 'save' event when update document
+    const doc = await document.save();
+
+    if (doc.constructor.modelName === "Product") {
+      setImageUrl(doc);
+    }
+    res.status(200).json({ data: doc });
   });
 
 exports.createOne = (Model) =>
   asyncHandler(async (req, res) => {
-    const document = await Model.create(req.body);
-    res.status(201).json({ data: document });
+    const newDoc = await Model.create(req.body);
+
+    if (newDoc.constructor.modelName === "Product") {
+      setImageUrl(newDoc);
+    }
+    res.status(201).json({ data: newDoc });
   });
 
 exports.getOne = (Model, populateOpts) =>
   asyncHandler(async (req, res, next) => {
-    let query = Model.findById(req.params.id);
+    const { id } = req.params;
+    // Build query
+    let query = Model.findById(id);
     if (populateOpts) query = query.populate(populateOpts);
 
+    // Execute query
     const document = await query;
 
     if (!document) {
-      return next(new ApiError("No document found", 404));
+      return next(new ApiError(`No document for this id ${id}`, 404));
     }
 
+    if (document.constructor.modelName === "Product") {
+      setImageUrl(document);
+    }
     res.status(200).json({ data: document });
   });
 
 exports.getAll = (Model, modelName = "") =>
   asyncHandler(async (req, res) => {
-    const apiFeatures = new ApiFeatures(Model.find(), req.query)
+    let filter = {};
+    if (req.filterObject) {
+      filter = req.filterObject;
+    }
+
+    // Build query
+    // const documentsCounts = await Model.countDocuments();
+    const apiFeatures = new ApiFeatures(Model.find(filter), req.query)
       .filter()
       .search(modelName)
-      .sort()
-      .limitFields();
+      .limitFields()
+      .sort();
+    // .paginate();
 
-    const count = await Model.countDocuments(apiFeatures.mongooseQuery);
-    apiFeatures.paginate(count);
+    // Apply pagination after filer and search
+    const docsCount = await Model.countDocuments(apiFeatures.mongooseQuery);
+    apiFeatures.paginate(docsCount);
 
-    const documents = await apiFeatures.mongooseQuery;
+    // Execute query
+    const { mongooseQuery, paginationResult } = apiFeatures;
+    const documents = await mongooseQuery;
 
-    res.status(200).json({
-      results: documents.length,
-      paginationResult: apiFeatures.paginationResult,
-      data: documents,
-    });
+    // Set Images url
+    if (Model.collection.collectionName === "products") {
+      documents.forEach((doc) => setImageUrl(doc));
+    }
+    res
+      .status(200)
+      .json({ results: docsCount, paginationResult, data: documents });
+  });
+
+exports.deleteAll = (Model) =>
+  asyncHandler(async (req, res, next) => {
+    await Model.deleteMany();
+    // 204 no content
+    res.status(204).send();
   });

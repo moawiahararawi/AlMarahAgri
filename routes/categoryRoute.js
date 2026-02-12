@@ -6,7 +6,7 @@ const {
   updateCategory,
   deleteCategory,
   uploadCategoryImage,
-  resizeCategoryImage,
+  resizeImage,
   deleteAll,
 } = require("../controllers/categoryController");
 const {
@@ -29,7 +29,7 @@ router
     authController.auth,
     authController.allowedTo("admin", "manager"),
     uploadCategoryImage,
-    resizeCategoryImage,
+    resizeImage,
     createCategoryValidator,
     createCategory,
   )
@@ -42,7 +42,7 @@ router
     authController.auth,
     authController.allowedTo("admin", "manager"),
     uploadCategoryImage,
-    resizeCategoryImage,
+    resizeImage,
     updateCategoryValidator,
     updateCategory,
   )

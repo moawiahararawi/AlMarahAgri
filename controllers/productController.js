@@ -1,65 +1,76 @@
 const sharp = require("sharp");
 const { v4: uuidv4 } = require("uuid");
 const asyncHandler = require("express-async-handler");
+const multer = require("multer");
 const s3 = require("../utils/s3");
+const ApiError = require("../utils/apiError");
 const Product = require("../models/productModel");
 const factory = require("./handlersFactory");
-const { uploadMultipleImages } = require("../middlewares/imageUpload");
 
-// ================= Upload =================
-exports.uploadProductImages = uploadMultipleImages([
+// AWS S3 setup
+
+// Multer setup
+const multerStorage = multer.memoryStorage();
+const multerFilter = (req, file, cb) => {
+  if (file.mimetype.startsWith("image")) {
+    cb(null, true);
+  } else {
+    cb(new ApiError("only images allowed", 400), false);
+  }
+};
+const upload = multer({ storage: multerStorage, fileFilter: multerFilter });
+
+exports.uploadProductImages = upload.fields([
   { name: "imageCover", maxCount: 1 },
   { name: "images", maxCount: 5 },
 ]);
 
-// ================= Resize & Upload to S3 =================
 exports.resizeProductImages = asyncHandler(async (req, res, next) => {
-  if (!req.files) return next();
-
-  // ---- Image Cover ----
+  // 1) Image cover
   if (req.files.imageCover) {
-    const coverBuffer = await sharp(req.files.imageCover[0].buffer)
-      .resize(1200, 1200)
-      .jpeg({ quality: 90 })
+    const ext = req.files.imageCover[0].mimetype.split("/")[1];
+    const imageCoverFilename = `products/${uuidv4()}-${Date.now()}-cover.${ext}`;
+
+    const buffer = await sharp(req.files.imageCover[0].buffer)
+      // .resize(2000, 1333) // optional
       .toBuffer();
 
-    const coverKey = `products/${uuidv4()}-${Date.now()}-cover.jpeg`;
+    const params = {
+      Bucket: process.env.AWS_S3_BUCKET_NAME,
+      Key: imageCoverFilename,
+      Body: buffer,
+      ContentType: req.files.imageCover[0].mimetype,
+      ACL: "public-read",
+    };
 
-    const coverUpload = await s3
-      .upload({
-        Bucket: process.env.AWS_BUCKET_NAME,
-        Key: coverKey,
-        Body: coverBuffer,
-        ContentType: "image/jpeg",
-      })
-      .promise();
-
-    req.body.imageCover = coverUpload.Location; // FULL URL
+    const uploadResult = await s3.upload(params).promise();
+    req.body.imageCover = uploadResult.Location;
   }
 
-  // ---- Images ----
+  // 2) Multiple images
   req.body.images = [];
-
   if (req.files.images) {
     await Promise.all(
-      req.files.images.map(async (img) => {
+      req.files.images.map(async (img, index) => {
+        const ext = img.mimetype.split("/")[1];
+        const filename = `products/${uuidv4()}-${Date.now()}-${
+          index + 1
+        }.${ext}`;
+
         const buffer = await sharp(img.buffer)
-          .resize(1200, 1200)
-          .jpeg({ quality: 90 })
+          // .resize(800, 800) // optional
           .toBuffer();
 
-        const key = `products/${uuidv4()}-${Date.now()}.jpeg`;
+        const params = {
+          Bucket: process.env.AWS_S3_BUCKET_NAME,
+          Key: filename,
+          Body: buffer,
+          ContentType: img.mimetype,
+          ACL: "public-read",
+        };
 
-        const upload = await s3
-          .upload({
-            Bucket: process.env.AWS_BUCKET_NAME,
-            Key: key,
-            Body: buffer,
-            ContentType: "image/jpeg",
-          })
-          .promise();
-
-        req.body.images.push(upload.Location);
+        const uploadResult = await s3.upload(params).promise();
+        req.body.images.push(uploadResult.Location);
       }),
     );
   }
@@ -67,7 +78,7 @@ exports.resizeProductImages = asyncHandler(async (req, res, next) => {
   next();
 });
 
-// ================= CRUD =================
+// --- Factory methods unchanged ---
 exports.getProducts = factory.getAll(Product, "Products");
 exports.getProduct = factory.getOne(Product, "reviews");
 exports.createProduct = factory.createOne(Product);
