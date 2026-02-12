@@ -1,85 +1,65 @@
 const sharp = require("sharp");
 const { v4: uuidv4 } = require("uuid");
 const asyncHandler = require("express-async-handler");
-const multer = require("multer");
-
 const s3 = require("../utils/s3");
-
-const ApiError = require("../utils/apiError");
 const Product = require("../models/productModel");
 const factory = require("./handlersFactory");
+const { uploadMultipleImages } = require("../middlewares/imageUpload");
 
-// Storage
-const multerStorage = multer.memoryStorage();
-
-// Accept only images
-const multerFilter = (req, file, cb) => {
-  if (file.mimetype.startsWith("image")) {
-    cb(null, true);
-  } else {
-    cb(new ApiError("only images allowed", 400), false);
-  }
-};
-
-const upload = multer({ storage: multerStorage, fileFilter: multerFilter });
-
-exports.uploadProductImages = upload.fields([
+// ================= Upload =================
+exports.uploadProductImages = uploadMultipleImages([
   { name: "imageCover", maxCount: 1 },
   { name: "images", maxCount: 5 },
 ]);
 
+// ================= Resize & Upload to S3 =================
 exports.resizeProductImages = asyncHandler(async (req, res, next) => {
-  // Process imageCover
-  if (req.files.imageCover) {
-    const ext = req.files.imageCover[0].mimetype.split("/")[1];
-    const imageCoverFilename = `products/${uuidv4()}-${Date.now()}-cover.${ext}`;
+  if (!req.files) return next();
 
-    const buffer = await sharp(req.files.imageCover[0].buffer)
-      // .resize(2000, 1333) // optional
-      .toFormat("jpeg")
+  // ---- Image Cover ----
+  if (req.files.imageCover) {
+    const coverBuffer = await sharp(req.files.imageCover[0].buffer)
+      .resize(1200, 1200)
       .jpeg({ quality: 90 })
       .toBuffer();
 
-    const uploadResult = await s3
+    const coverKey = `products/${uuidv4()}-${Date.now()}-cover.jpeg`;
+
+    const coverUpload = await s3
       .upload({
         Bucket: process.env.AWS_BUCKET_NAME,
-        Key: imageCoverFilename,
-        Body: buffer,
-        ACL: "public-read",
+        Key: coverKey,
+        Body: coverBuffer,
         ContentType: "image/jpeg",
       })
       .promise();
 
-    req.body.imageCover = uploadResult.Location; // save public URL
+    req.body.imageCover = coverUpload.Location; // FULL URL
   }
 
-  // Process other images
+  // ---- Images ----
   req.body.images = [];
+
   if (req.files.images) {
     await Promise.all(
-      req.files.images.map(async (img, index) => {
-        const ext = img.mimetype.split("/")[1];
-        const filename = `products/${uuidv4()}-${Date.now()}-${
-          index + 1
-        }.${ext}`;
-
+      req.files.images.map(async (img) => {
         const buffer = await sharp(img.buffer)
-          // .resize(800, 800) // optional
-          .toFormat("jpeg")
+          .resize(1200, 1200)
           .jpeg({ quality: 90 })
           .toBuffer();
 
-        const uploadResult = await s3
+        const key = `products/${uuidv4()}-${Date.now()}.jpeg`;
+
+        const upload = await s3
           .upload({
             Bucket: process.env.AWS_BUCKET_NAME,
-            Key: filename,
+            Key: key,
             Body: buffer,
-            ACL: "public-read",
             ContentType: "image/jpeg",
           })
           .promise();
 
-        req.body.images.push(uploadResult.Location);
+        req.body.images.push(upload.Location);
       }),
     );
   }
@@ -87,26 +67,9 @@ exports.resizeProductImages = asyncHandler(async (req, res, next) => {
   next();
 });
 
-// @desc      Get all products
-// @route     GET /api/v1/products
-// @access    Public
+// ================= CRUD =================
 exports.getProducts = factory.getAll(Product, "Products");
-
-// @desc      Get specific product by id
-// @route     GET /api/v1/products/:id
-// @access    Public
 exports.getProduct = factory.getOne(Product, "reviews");
-
-// @desc      Create product
-// @route     POST /api/v1/products
-// @access    Private
 exports.createProduct = factory.createOne(Product);
-// @desc      Update product
-// @route     PATCH /api/v1/products/:id
-// @access    Private
 exports.updateProduct = factory.updateOne(Product);
-
-// @desc     Delete product
-// @route    DELETE /api/v1/products/:id
-// @access   Private
 exports.deleteProduct = factory.deleteOne(Product);
