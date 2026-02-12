@@ -36,7 +36,7 @@ exports.resizeProductImages = asyncHandler(async (req, res, next) => {
       .toBuffer();
 
     const params = {
-      Bucket: process.env.AWS_S3_BUCKET_NAME,
+      Bucket: process.env.AWS_BUCKET_NAME,
       Key: imageCoverFilename,
       Body: buffer,
       ContentType: req.files.imageCover[0].mimetype,
@@ -61,7 +61,7 @@ exports.resizeProductImages = asyncHandler(async (req, res, next) => {
           .toBuffer();
 
         const params = {
-          Bucket: process.env.AWS_S3_BUCKET_NAME,
+          Bucket: process.env.AWS_BUCKET_NAME,
           Key: filename,
           Body: buffer,
           ContentType: img.mimetype,

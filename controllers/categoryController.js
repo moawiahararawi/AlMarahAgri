@@ -26,7 +26,7 @@ exports.resizeImage = asyncHandler(async (req, res, next) => {
 
   // Upload to S3
   const params = {
-    Bucket: process.env.AWS_S3_BUCKET_NAME, // e.g., "almarah-products-bucket"
+    Bucket: process.env.AWS_BUCKET_NAME,
     Key: filename,
     Body: buffer,
     ContentType: req.file.mimetype,
