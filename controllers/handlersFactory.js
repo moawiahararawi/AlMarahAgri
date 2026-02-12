@@ -3,17 +3,14 @@ const ApiError = require("../utils/apiError");
 const ApiFeatures = require("../utils/apiFeatures");
 
 const setImageUrl = (doc) => {
-  if (doc.imageCover) {
-    const imageCoverUrl = `${process.env.BASE_URL}/products/${doc.imageCover}`;
-    doc.imageCover = imageCoverUrl;
+  if (!doc) return;
+  if (doc.imageCover && !doc.imageCover.startsWith("http")) {
+    doc.imageCover = `${process.env.BASE_URL}/products/${doc.imageCover}`;
   }
-  if (doc.images) {
-    const images = [];
-    doc.images.forEach((image) => {
-      const imageUrl = `${process.env.BASE_URL}/products/${image}`;
-      images.push(imageUrl);
-    });
-    doc.images = images;
+  if (doc.images && doc.images.length > 0) {
+    doc.images = doc.images.map((img) =>
+      img.startsWith("http") ? img : `${process.env.BASE_URL}/products/${img}`,
+    );
   }
 };
 
