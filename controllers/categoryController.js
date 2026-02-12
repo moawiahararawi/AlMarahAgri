@@ -30,7 +30,6 @@ exports.resizeImage = asyncHandler(async (req, res, next) => {
     Key: filename,
     Body: buffer,
     ContentType: req.file.mimetype,
-    ACL: "public-read", // so URL can be accessed publicly
   };
 
   const uploadResult = await s3.upload(params).promise();

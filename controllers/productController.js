@@ -40,7 +40,6 @@ exports.resizeProductImages = asyncHandler(async (req, res, next) => {
       Key: imageCoverFilename,
       Body: buffer,
       ContentType: req.files.imageCover[0].mimetype,
-      ACL: "public-read",
     };
 
     const uploadResult = await s3.upload(params).promise();
@@ -66,7 +65,6 @@ exports.resizeProductImages = asyncHandler(async (req, res, next) => {
           Key: filename,
           Body: buffer,
           ContentType: img.mimetype,
-          ACL: "public-read",
         };
 
         const uploadResult = await s3.upload(params).promise();
