@@ -127,7 +127,6 @@ exports.updateOrderToDelivered = asyncHandler(async (req, res, next) => {
 // @route   GET /api/orders/:cartId
 // @access  Private/User
 exports.checkoutSession = asyncHandler(async (req, res, next) => {
-  // 1) Get the currently cart
   const cart = await Cart.findById(req.params.cartId);
   if (!cart) {
     return next(
@@ -135,74 +134,77 @@ exports.checkoutSession = asyncHandler(async (req, res, next) => {
     );
   }
 
-  // 2) Get cart price, Check if there is coupon apply
   const cartPrice = cart.totalAfterDiscount
     ? cart.totalAfterDiscount
     : cart.totalCartPrice;
 
-  // 3) Create checkout session
   const session = await stripe.checkout.sessions.create({
+    payment_method_types: ["card"],
+    mode: "payment",
+
     line_items: [
       {
-        name: req.user.name,
-        amount: cartPrice * 100,
-        currency: "egp",
+        price_data: {
+          currency: "egp",
+          product_data: {
+            name: "Order Payment",
+          },
+          unit_amount: cartPrice * 100,
+        },
         quantity: 1,
       },
     ],
-    mode: "payment",
-    // success_url: `${req.protocol}://${req.get('host')}/orders`,
-    success_url: `http://localhost:3000/user/allorders`,
-    // cancel_url: `${req.protocol}://${req.get('host')}/cart`,
-    cancel_url: `http://localhost:3000/cart`,
+
+    success_url: `${process.env.BASE_URL}/user/allorders`,
+    cancel_url: `${process.env.BASE_URL}/cart`,
+
     customer_email: req.user.email,
-    client_reference_id: req.params.cartId,
-    metadata: req.body.shippingAddress,
+
+    // 🔑 IMPORTANT FIXES
+    client_reference_id: req.user._id.toString(),
+
+    metadata: {
+      cartId: req.params.cartId,
+    },
   });
 
-  // res.redirect(303, session.url);
-
-  // 3) Create session as response
   res.status(200).json({
     status: "success",
     session,
   });
 });
-
 const createOrderCheckout = async (session) => {
-  // 1) Get needed data from session
+  const userId = session.client_reference_id;
   const cartId = session.client_reference_id;
-  const checkoutAmount = session.display_items[0].amount / 100;
-  const shippingAddress = session.metadata;
+  const totalOrderPrice = session.amount_total / 100;
 
-  // 2) Get Cart and User
+  if (!cartId || !userId) return;
+
   const cart = await Cart.findById(cartId);
-  const user = await User.findOne({ email: session.customer_email });
+  const user = await User.findById(userId);
 
-  //3) Create order
+  if (!cart || !user) return;
+
   const order = await Order.create({
     user: user._id,
     cartItems: cart.products,
-    shippingAddress,
-    totalOrderPrice: checkoutAmount,
+    totalOrderPrice,
     paymentMethodType: "card",
     isPaid: true,
     paidAt: Date.now(),
   });
 
-  // 4) After creating order decrement product quantity, increment sold
-  // Performs multiple write operations with controls for order of execution.
   if (order) {
     const bulkOption = cart.products.map((item) => ({
       updateOne: {
         filter: { _id: item.product },
-        update: { $inc: { quantity: -item.count, sold: +item.count } },
+        update: {
+          $inc: { quantity: -item.count, sold: +item.count },
+        },
       },
     }));
 
-    await Product.bulkWrite(bulkOption, {});
-
-    // 5) Clear cart
+    await Product.bulkWrite(bulkOption);
     await Cart.findByIdAndDelete(cart._id);
   }
 };
