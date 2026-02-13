@@ -8,7 +8,7 @@ const {
   updateOrderToDelivered,
   checkoutSession,
 } = require("../controllers/orderService");
-const orderController = require("../controllers/orderService");
+
 const authController = require("../controllers/authController");
 
 const router = express.Router();

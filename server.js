@@ -1,13 +1,12 @@
 const path = require("path");
 const express = require("express");
 const dotenv = require("dotenv");
-const cors = require("cors");
 
 dotenv.config({ path: "config.env" });
 const morgan = require("morgan");
 require("colors");
 const compression = require("compression");
-
+const cors = require("cors");
 const bodyParser = require("body-parser");
 
 const ApiError = require("./utils/apiError");
@@ -16,7 +15,6 @@ const mountRoutes = require("./routes");
 const { webhookCheckout } = require("./controllers/orderService");
 
 const dbConnection = require("./config/database");
-const orderRoute = require("./routes/orderRoute");
 
 // const categoryRouter = require('./routes/categoryRoute');
 // const subCategoryRouter = require('./routes/subCategoryRoute');
@@ -34,15 +32,6 @@ dbConnection();
 
 // Builtin Middleware
 const app = express();
-app.use(
-  cors({
-    origin: ["http://localhost:3000", "https://almarahagri.onrender.com"],
-    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-    allowedHeaders: ["Content-Type", "Authorization"],
-    credentials: true,
-  }),
-);
-app.use("/api/v1/orders", orderRoute);
 
 app.use(cors());
 app.options("*", cors());
@@ -51,6 +40,7 @@ app.enable("trust proxy");
 // Add hook here before we call body parser, because stripe will send data in the body in form raw
 app.post(
   "/webhook-checkout",
+  // express.raw({ type: 'application/json' }),
   bodyParser.raw({ type: "application/json" }),
   webhookCheckout,
 );
