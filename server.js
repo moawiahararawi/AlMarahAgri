@@ -1,12 +1,13 @@
 const path = require("path");
 const express = require("express");
 const dotenv = require("dotenv");
+const cors = require("cors");
 
 dotenv.config({ path: "config.env" });
 const morgan = require("morgan");
 require("colors");
 const compression = require("compression");
-const cors = require("cors");
+
 const bodyParser = require("body-parser");
 
 const ApiError = require("./utils/apiError");
@@ -33,6 +34,14 @@ dbConnection();
 
 // Builtin Middleware
 const app = express();
+app.use(
+  cors({
+    origin: ["http://localhost:3000", "https://almarahagri.onrender.com"],
+    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allowedHeaders: ["Content-Type", "Authorization"],
+    credentials: true,
+  }),
+);
 app.use("/api/v1/orders", orderRoute);
 
 app.use(cors());
