@@ -220,4 +220,6 @@ exports.webhookCheckout = (req, res, next) => {
   }
 
   res.status(200).json({ received: true });
+  console.log("🔥 Webhook hit");
+  console.log("Event type:", event.type);
 };
