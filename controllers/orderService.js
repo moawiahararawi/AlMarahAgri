@@ -145,10 +145,8 @@ exports.checkoutSession = asyncHandler(async (req, res, next) => {
     ],
 
     mode: "payment",
-    // success_url: `${req.protocol}://${req.get('host')}/orders`,
-    success_url: `http://localhost:3000/user/allorders`,
-    // cancel_url: `${req.protocol}://${req.get('host')}/cart`,
-    cancel_url: `http://localhost:3000/cart`,
+    success_url: `${process.env.FRONTEND_URL}/user/allorders`,
+    cancel_url: `${process.env.FRONTEND_URL}/cart`,
     customer_email: req.user.email,
     client_reference_id: req.params.cartId,
     metadata: req.body.shippingAddress,
@@ -166,7 +164,7 @@ exports.checkoutSession = asyncHandler(async (req, res, next) => {
 const createOrderCheckout = async (session) => {
   // 1) Get needed data from session
   const cartId = session.client_reference_id;
-  const checkoutAmount = session.display_items[0].amount / 100;
+  const checkoutAmount = session.amount_total / 100;
   const shippingAddress = session.metadata;
 
   // 2) Get Cart and User
